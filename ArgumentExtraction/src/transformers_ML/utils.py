@@ -1,6 +1,49 @@
 from src.transformers_ML.config import *
 from src.transformers_ML.data_loader import RowSentencesHandler
 
+
+def OversamplingGenerator(x_train, y_traing):
+    try:
+        x_train = x_train.tolist()
+        y_traing = y_traing.tolist()
+    except:
+        pass
+
+    count_0 = y_traing.count(0)
+    count_1 = y_traing.count(1)
+    print('count 0: ', count_0, 'count 1: ', count_1)
+
+    if count_0 < count_1:
+        target_count = count_1
+        minor_class = 0
+    else:
+        target_count = count_0
+        minor_class = 1
+
+    x_over, y_over = x_train, y_traing
+
+    index = 0
+    while True:
+        # print(y_over.count(minor_class))
+        if y_over.count(minor_class) >= target_count:
+            break
+        if minor_class == y_traing[index]:
+            x_over.append(x_train[index])
+            y_over.append(y_traing[index])
+
+        if index < len(x_train):
+            index += 1
+        else:
+            index = 0
+
+    indices = list(range(target_count * 2))
+    random.shuffle(indices)
+    x_final = [x_over[i] for i in indices]
+    y_final = [y_over[i] for i in indices]
+    
+    print('count 0: ', y_final.count(0), 'count 1: ', y_final.count(1))
+    return x_final, y_final
+
 def mapping(y):
     conversion = ['n', 'c', 'p']
     ans = [conversion[int(p)] for p in y]
@@ -203,3 +246,33 @@ def EvaluateBertSeqCl(model, validation_dataloader):
     # print("  Accuracy: {0:.4f}".format(eval_accuracy / nb_eval_steps))
     # print("  Accuracy-2: {0:.4f}".format(flat_accuracy(total_preds, total_labels)))
     print(classification_report(total_labels, total_preds))
+
+#########################################################
+# Function to use the model for prediction
+#########################################################
+def Predict(model, sentences, logits_enable=False):
+    model.eval()
+
+    text_handler = RowSentencesHandler()
+    dataloader = text_handler.GetDataLoader(sentences)
+    prediction_result = np.array([])
+    logits_result = np.array([[0,0]])
+
+    for batch in dataloader:
+        # Add batch to GPU
+        batch = tuple(t.to(device) for t in batch)
+        # Unpack the inputs from our dataloader
+        input_ids, input_mask = batch
+
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=input_mask)
+
+        logits = outputs[0]
+        logits = logits.detach().cpu().numpy()
+        prediction_result = np.append(prediction_result, np.argmax(logits, axis=1).flatten())
+        logits_result = np.append(logits_result, logits, axis=0)
+
+    if logits_enable:
+        return logits_result[1:].tolist()
+
+    return prediction_result.tolist()

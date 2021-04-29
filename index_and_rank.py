@@ -1,11 +1,13 @@
+from utils.config import PROJECT_ROOT_DIR
+
 from whoosh.analysis import StemmingAnalyzer
 from rank_bm25 import BM25Okapi
 from utils.documents_retrieval import GetTopics
 import json
 
 
-BASE_DATA_DIR = './retrieved_documents/'
-OUTPUT_FILE_NAME = './run.txt'
+BASE_DATA_DIR = PROJECT_ROOT_DIR + '/retrieved_documents/'
+OUTPUT_FILE_NAME = PROJECT_ROOT_DIR + '/run.txt'
 TAG = 'BERT_and_bm25_ranking'
 
 def GetTokenizedDocuments(analyzer, documents):
@@ -17,7 +19,7 @@ def GetTokenizedDocuments(analyzer, documents):
         tokenized_docs.append([token.text for token in analyzer(arg_text)])
     return tokenized_docs
 
-def ranking(bm25_instance, analyzer, query, documents, size=15):
+def ranking(bm25_instance, analyzer, query, documents, size=10):
     tokenized_query = [token.text for token in analyzer(query)]
     doc_scores = bm25_instance.get_scores(tokenized_query)
     result = [{'trec_id':doc['trec_id'], 'score':doc_scores[index]} for index, doc in enumerate(documents)]
@@ -28,14 +30,14 @@ def main():
     output_lines = []
     analyzer = StemmingAnalyzer()
     topics = GetTopics()
-    documents = json.load(open('retrieval_results_with_args.json', encoding='utf-8'))
+    documents = json.load(open(PROJECT_ROOT_DIR + 'retrieval_results_with_args.json', encoding='utf-8'))
 
     for topic_docs in documents:
         tokenized_docs = GetTokenizedDocuments(analyzer, topic_docs['documents'])
         print(len(tokenized_docs))
         bm25 = BM25Okapi(tokenized_docs)
         query = topic_docs['topic']['title']
-        ranked_docs = ranking(bm25, analyzer, query, topic_docs['documents'])
+        ranked_docs = ranking(bm25, analyzer, query, topic_docs['documents'], size=20)
         for rank, item in enumerate(ranked_docs, start=1):
             # output format
             #  qid Q0 doc rank score tag

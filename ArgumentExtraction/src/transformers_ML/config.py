@@ -4,10 +4,11 @@ import torch
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from sklearn.utils.class_weight import compute_class_weight
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.metrics import f1_score
-import transformers
+from imblearn.over_sampling import RandomOverSampler
 
+import transformers
 from transformers import AutoModel, BertTokenizerFast, BertTokenizer, BertForSequenceClassification, BertConfig
 from transformers import DistilBertForSequenceClassification, DistilBertTokenizerFast, RobertaForSequenceClassification, RobertaTokenizerFast
 
@@ -23,16 +24,18 @@ import random
 import os
 import sys
 import json
+import pickle
 import pathlib
 
-TRANSFORMERS_MODEL_NAME = 'distilroberta-base'
+TRANSFORMERS_MODEL_NAME = 'distilbert-base-uncased'
 
 # pathlib.Path(__file__).parent.absolute()
 ARG_EXTRACTION_ROOT_DIR = os.path.abspath(os.getcwd())
 
 
 # specify GPU
-device = torch.device("cuda")
+# device = torch.device("cuda")
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 # device = torch.device("cpu")
 
 nlp = en_core_web_sm.load()

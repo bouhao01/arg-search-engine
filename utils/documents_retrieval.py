@@ -9,7 +9,7 @@ from boilerpy3 import extractors
 
 RETIEVED_DOCUMENTS_DIR = PROJECT_ROOT_DIR + '/retrieved_documents/row-data/'
 EXTRACTED_DOCUMENTS_DIR = PROJECT_ROOT_DIR + '/retrieved_documents/extracted-data/'
-TOPICS_FILE = PROJECT_ROOT_DIR + '/topics_2020.xml'
+TOPICS_FILE = PROJECT_ROOT_DIR + '/topics.xml'
 
 baseUrl = 'https://www.chatnoir.eu'
 api_key = 'e47fe59e-2d2f-475e-a424-afcdb94ba17b'
@@ -43,9 +43,18 @@ def GetDocumentsFromChatNoir(query, size=10):
     return results['results']
 
 def GetDocContent(topic_id, uuid, index='cw12'):
-    url = baseUrl + '/cache?uuid={}&index={}&raw'.format(uuid, index)
-    g = requests.get(url)
-    source_file = g.text # trafilatura.fetch_url(url)
+    url = baseUrl + '/cache?uuid={}&index={}&raw&plain'.format(uuid, index)
+    # g = requests.get(url) 5e733d53-43e8-58f0-abfe-fa7fc2538733
+    source_file = trafilatura.fetch_url(url) # g.text
+
+    if not source_file:
+        print('Cannot retrieve document {}'.format(uuid))
+        time.sleep(0.5)
+        return ' ', ' '
+        # return GetDocContent(topic_id, uuid, index)
+
+    print('Document has been retrieved succesfully {}'.format(uuid))
+
 
     # Extract content using boilerpy3 and trafilatura, then combine results
     data_1 = trafilatura.extract(source_file)
@@ -74,12 +83,12 @@ def DownloadRelatedDocuments():
     topics = GetTopics()
 
     for topic in topics:
+
         result_obj = {
                     'topic' : topic
                     ,'documents' : []
                     }
 
-        time.sleep(0.2)
         if not os.path.exists(RETIEVED_DOCUMENTS_DIR + 'topic-{}/'.format(topic['id'])):
             os.mkdir(RETIEVED_DOCUMENTS_DIR + 'topic-{}/'.format(topic['id']))
         if not os.path.exists(EXTRACTED_DOCUMENTS_DIR + 'topic-{}/'.format(topic['id'])):
@@ -88,23 +97,29 @@ def DownloadRelatedDocuments():
         print('\n', '#'*30)
         print('# Retrieving documents for topic {}: {}'.format(topic['id'], topic['title']))
         print('#'*30)
-        documentsFromChatNoir = GetDocumentsFromChatNoir(topic['title'], 20)
+        documentsFromChatNoir = GetDocumentsFromChatNoir(topic['title'], size=30)
 
         for doc in documentsFromChatNoir:
-            time.sleep(0.2)
-            source_file, main_content = GetDocContent(topic['id'], doc['uuid'])
+
             source_file_path = RETIEVED_DOCUMENTS_DIR + 'topic-{}/{}.html'.format(topic['id'], doc['trec_id'])
             content_file_path = EXTRACTED_DOCUMENTS_DIR + 'topic-{}/{}.txt'.format(topic['id'], doc['trec_id'])
 
+            doc['source_file_path'] = os.path.abspath(source_file_path)
+            doc['content_file_path'] = os.path.abspath(content_file_path)
+            result_obj['documents'].append(doc)
+
+            # No need to retrieve the file if it is already retrieved
+            if os.path.exists(source_file_path) and os.path.exists(content_file_path):
+                print('Document {} has been already retrieved'.format(doc['uuid']))
+                continue
+
+            time.sleep(0.5)
+            source_file, main_content = GetDocContent(topic['id'], doc['uuid'])
             # Save local copy of the source file and the content file
             with open(source_file_path, 'w', encoding='utf-8') as f:
                 f.write(source_file)
             with open(content_file_path, 'w', encoding='utf-8') as f:
                 f.write(main_content)
-
-            doc['source_file_path'] = os.path.abspath(source_file_path)
-            doc['content_file_path'] = os.path.abspath(content_file_path)
-            result_obj['documents'].append(doc)
 
         retrieval_results.append(result_obj)
 

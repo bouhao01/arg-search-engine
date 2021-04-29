@@ -8,22 +8,29 @@ from utils.documents_retrieval import DownloadRelatedDocuments, GetRetrievalResu
 def init():
     global model
 
-    bert_model_path = PROJECT_ROOT_DIR + '/ArgumentExtraction/models/distilroberta-base_essays_a_n_epoch_0_weighted.pt'
+    bert_model_path = PROJECT_ROOT_DIR + '/models/stack_distilbert_weighted.pt'
     model = LoadBertModel(bert_model_path)
 
 def main(args):
     # Retrieve docs from chatnoir
     #####################################
-    # DownloadRelatedDocuments() # Run only once
-    retrieval_info = ExtractDocsMainCentent()
+    DownloadRelatedDocuments() # Run only once
+    retrieval_info = GetRetrievalResults()
 
     for ret_obj in retrieval_info:
+        print('Extracting arguments from documents of topic-{}'.format(ret_obj['topic']))
         for doc in ret_obj['documents']:
             with open(doc['content_file_path'], 'r', encoding='utf-8') as f:
                 sentences = f.readlines()
 
-            if not sentences:
+            if not sentences or 1 == len(sentences):
                 print('no sentences in {}'.format(doc_content['trec_id']))
+                continue
+
+            args_file_path = EXTRACTED_DOCUMENTS_DIR + 'topic-{}/{}.args'.format(ret_obj['topic']['id'], doc['trec_id'])
+            doc['args_file_path'] = os.path.abspath(args_file_path)
+            if os.path.exists(args_file_path):
+                print('arguments already extracted from document: {}'.format(doc['trec_id']))
                 continue
 
             # Extract argument from documents
@@ -34,10 +41,8 @@ def main(args):
             # Save extracted arguments
             # and update doc info
             ####################################
-            args_file_path = EXTRACTED_DOCUMENTS_DIR + 'topic-{}/{}.args'.format(ret_obj['topic']['id'], doc['trec_id'])
             with open(args_file_path, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(args))
-            doc['args_file_path'] = os.path.abspath(args_file_path)
+                f.write(''.join(args))
 
     # Save args info file
     ####################################

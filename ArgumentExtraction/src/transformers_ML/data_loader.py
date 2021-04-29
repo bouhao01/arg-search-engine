@@ -1,30 +1,75 @@
 from src.transformers_ML.config import *
 
-#define a batch size
 data_dir = ARG_EXTRACTION_ROOT_DIR + '/corpora/parsed-corpora/'
 batch_size = 32
 max_seq_len = 128
 
 
+def OversamplingGenerator(x_train, y_traing):
+    try:
+        x_train = x_train.tolist()
+        y_traing = y_traing.tolist()
+    except:
+        pass
+
+    count_0 = y_traing.count(0)
+    count_1 = y_traing.count(1)
+
+    if count_0 < count_1:
+        target_count = count_1
+        minor_class = 0
+    else:
+        target_count = count_0
+        minor_class = 1
+
+    x_over, y_over = x_train, y_traing
+
+    index = 0
+    while True:
+        # print(y_over.count(minor_class))
+        if y_over.count(minor_class) >= target_count:
+            break
+        if minor_class == y_traing[index]:
+            x_over.append(x_train[index])
+            y_over.append(y_traing[index])
+
+        if index < len(x_train):
+            index += 1 
+        else:
+            index = 0
+
+    indices = list(range(target_count * 2))
+    random.shuffle(indices)
+    x_final = [x_over[i] for i in indices]
+    y_final = [y_over[i] for i in indices]
+    return x_final, y_final
+
 class DataLoadHandler():
 
-    def __init__(self, test_size = 0.4):
+    def __init__(self, test_size = 0.25):
 
         ess_df = pd.read_json(data_dir + 'essays.json')
         ess_df = ess_df[['sent-text', 'sent-class']]
         web_df = pd.read_json(data_dir + 'web_discourse.json')
-        sentences_df = ess_df # pd.concat([ess_df, web_df])
-        print(sentences_df['sent-class'].value_counts())
+        sentences_df = pd.concat([ess_df, web_df]) # ess_df
 
         # sentences_df = pd.read_json(data_path)
         sentences_df['sent-class'] = sentences_df['sent-class'].map({'n':0, 'c':1, 'p':1})
-        train_text, test_text, train_labels, test_labels = train_test_split(sentences_df['sent-text'], sentences_df['sent-class'],
+        X, y = sentences_df['sent-text'], sentences_df['sent-class']
+
+
+        train_text, test_text, train_labels, test_labels = train_test_split(X, y,
                                                                             random_state = 2018,
                                                                             shuffle = True,
                                                                             test_size = test_size,
-                                                                            stratify = sentences_df['sent-class'])
+                                                                            stratify = y)
 
-        self.train_text, self.train_labels = train_text, train_labels
+        
+
+
+        # x_train_over , y_train_over = OversamplingGenerator(train_text, train_labels)
+        # self.train_text, self.train_labels = np.array(x_train_over), np.array(y_train_over)
+        self.train_text, self.train_labels = x_train_over, y_train_over
         self.test_text, self.test_labels = test_text, test_labels
         self.TokenizeAndEncode()
 
@@ -97,9 +142,21 @@ class DataLoadHandler():
 
 class RowSentencesHandler():
     def __init__(self):
-        self.tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased', do_lower_case=True)
+        if 'bert-base-uncased' == TRANSFORMERS_MODEL_NAME:
+            tokenizer = BertTokenizerFast.from_pretrained(TRANSFORMERS_MODEL_NAME, do_lower_case=True)
 
-    def GetDataLoader(self, sentences):
+        elif 'distilbert-base-uncased' == TRANSFORMERS_MODEL_NAME:
+            tokenizer = DistilBertTokenizerFast.from_pretrained(TRANSFORMERS_MODEL_NAME, do_lower_case=True)
+
+        elif 'roberta-base' == TRANSFORMERS_MODEL_NAME:
+                tokenizer = RobertaTokenizerFast.from_pretrained(TRANSFORMERS_MODEL_NAME, do_lower_case=True)
+
+        elif 'distilroberta-base' == TRANSFORMERS_MODEL_NAME:
+            tokenizer = RobertaTokenizerFast.from_pretrained(TRANSFORMERS_MODEL_NAME, do_lower_case=True)
+
+        self.tokenizer = tokenizer
+
+    def GetDataLoader(self, sentences, labels=None):
         tokens = self.tokenizer.batch_encode_plus(
             sentences,
             max_length = max_seq_len,
@@ -111,9 +168,15 @@ class RowSentencesHandler():
 
         sequence = torch.tensor(tokens['input_ids']) #.to(device)
         mask = torch.tensor(tokens['attention_mask']) #.to(device)
+        if labels:
+            y_labels = torch.tensor(labels)
 
         # wrap tensors
-        data = TensorDataset(sequence, mask)
+        if labels:
+            data = TensorDataset(sequence, mask, y_labels)
+        else:
+            data = TensorDataset(sequence, mask)
+
         # sampler for sampling the data during training
         sampler = SequentialSampler(data)
         # dataLoader for validation set

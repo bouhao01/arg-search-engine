@@ -100,3 +100,11 @@ def TextToSentences(text):
     document = nlp(text)
     sentences = [s.text for s in document.sents if len(s) > 20]
     return sentences
+
+def EmbedDocument(text_doc):
+    tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
+    model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+    input_ids = torch.tensor(tokenizer.encode("Hello from the other side")).unsqueeze(0)  # Batch size 1
+    outputs = model(input_ids)
+    last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+    return last_hidden_states

@@ -3,9 +3,12 @@ import trafilatura
 import requests
 import xml.etree.ElementTree as ET
 from boilerpy3 import extractors
+import concurrent.futures
 
 
+from rake_nltk import Rake
 
+rake = Rake()
 
 RETIEVED_DOCUMENTS_DIR = PROJECT_ROOT_DIR + '/retrieved_documents/row-data/'
 EXTRACTED_DOCUMENTS_DIR = PROJECT_ROOT_DIR + '/retrieved_documents/extracted-data/'
@@ -15,6 +18,39 @@ baseUrl = 'https://www.chatnoir.eu'
 api_key = 'e47fe59e-2d2f-475e-a424-afcdb94ba17b'
 extractor = extractors.ArticleExtractor()
 
+
+def GetTrimmedKeyword(keyword):
+    stop_words = ['better', 'difference', 'best']
+    trimmed_word = ' '.join([token.lemma_ for token in nlp(keyword) if token.text not in stop_words])
+    return trimmed_word
+
+def GetKeywords(text):
+    keywords = []
+    rake.extract_keywords_from_text(text)
+    keywords_rake = rake.get_ranked_phrases()
+    for word in keywords_rake:
+        trimmed_word = GetTrimmedKeyword(word)
+        if trimmed_word: keywords.append(trimmed_word)
+    return keywords
+
+def GetDocumentIntersection(set_1, set_2):
+    intersection_set = []
+    for doc_1 in set_1:
+        for doc_2 in set_2:
+            if doc_1['uuid'] == doc_2['uuid']:
+                doc_1['score_2'] = doc_2['score']
+                doc_1['page_rank_2'] = doc_2['page_rank']
+                doc_1['spam_rank_2'] = doc_2['spam_rank']
+                intersection_set.append(doc_1)
+                break
+    print('intersection set: ', len(intersection_set))
+    return intersection_set
+
+def CreatTopicDirs(topic):
+    if not os.path.exists(RETIEVED_DOCUMENTS_DIR + 'topic-{}/'.format(topic['id'])):
+            os.mkdir(RETIEVED_DOCUMENTS_DIR + 'topic-{}/'.format(topic['id']))
+    if not os.path.exists(EXTRACTED_DOCUMENTS_DIR + 'topic-{}/'.format(topic['id'])):
+        os.mkdir(EXTRACTED_DOCUMENTS_DIR + 'topic-{}/'.format(topic['id']))
 
 def GetTopics(fileLocarion=TOPICS_FILE):
     topics = []
@@ -55,7 +91,6 @@ def GetDocContent(topic_id, uuid, index='cw12'):
 
     print('Document has been retrieved succesfully {}'.format(uuid))
 
-
     # Extract content using boilerpy3 and trafilatura, then combine results
     data_1 = trafilatura.extract(source_file)
     if data_1:
@@ -78,25 +113,56 @@ def GetDocContent(topic_id, uuid, index='cw12'):
 
     return source_file, main_content
 
+def GetDocumentsTopic(topic, size=60):
+    result_obj = {'topic' : topic, 'documents' : []}
+    CreatTopicDirs(topic)
+
+    keywords = GetKeywords(topic['title'])
+    print('\n{}\n# Retrieving documents for topic {}: {}\n{}\n'.format('#'*30, topic['id'], topic['title'], '#'*30))
+
+    query_1 = topic['title']
+    query_2 = ' AND '.join(keywords)
+    documents_set_1 = GetDocumentsFromChatNoir(query_1, size=size)
+    documents_set_2 = GetDocumentsFromChatNoir(query_2, size=size)
+
+    documentsFromChatNoir = documents_set_1 #GetDocumentIntersection(documents_set_1, documents_set_2) # documents_set_1
+
+    for doc in documentsFromChatNoir:
+
+        source_file_path = RETIEVED_DOCUMENTS_DIR + 'topic-{}/{}.html'.format(topic['id'], doc['trec_id'])
+        content_file_path = EXTRACTED_DOCUMENTS_DIR + 'topic-{}/{}.txt'.format(topic['id'], doc['trec_id'])
+
+        doc['source_file_path'] = os.path.abspath(source_file_path)
+        doc['content_file_path'] = os.path.abspath(content_file_path)
+        result_obj['documents'].append(doc)
+
+        # No need to retrieve the file if it is already retrieved
+        if os.path.exists(source_file_path) and os.path.exists(content_file_path):
+            print('Document {} has been already retrieved'.format(doc['uuid']))
+            continue
+
+        source_file, main_content = GetDocContent(topic['id'], doc['uuid'])
+        with open(source_file_path, 'w', encoding='utf-8') as f:
+            f.write(source_file)
+        with open(content_file_path, 'w', encoding='utf-8') as f:
+            f.write(main_content)
+
+    return result_obj
+
 def DownloadRelatedDocuments():
     retrieval_results = []
     topics = GetTopics()
 
     for topic in topics:
-
+        '''
         result_obj = {
                     'topic' : topic
                     ,'documents' : []
                     }
 
-        if not os.path.exists(RETIEVED_DOCUMENTS_DIR + 'topic-{}/'.format(topic['id'])):
-            os.mkdir(RETIEVED_DOCUMENTS_DIR + 'topic-{}/'.format(topic['id']))
-        if not os.path.exists(EXTRACTED_DOCUMENTS_DIR + 'topic-{}/'.format(topic['id'])):
-            os.mkdir(EXTRACTED_DOCUMENTS_DIR + 'topic-{}/'.format(topic['id']))
+        CreatTopicDirs(topic)
 
-        print('\n', '#'*30)
-        print('# Retrieving documents for topic {}: {}'.format(topic['id'], topic['title']))
-        print('#'*30)
+        print('\n{}\n# Retrieving documents for topic {}: {}\n{}\n'.format('#'*30, topic['id'], topic['title']), '#'*30)
         documentsFromChatNoir = GetDocumentsFromChatNoir(topic['title'], size=30)
 
         for doc in documentsFromChatNoir:
@@ -121,9 +187,11 @@ def DownloadRelatedDocuments():
             with open(content_file_path, 'w', encoding='utf-8') as f:
                 f.write(main_content)
 
-        retrieval_results.append(result_obj)
+        '''
+        topic_docs = GetDocumentsTopic(topic)
+        retrieval_results.append(topic_docs)
 
-        print('{} documents has been collected.'.format(len(documentsFromChatNoir)))
+        print('{} documents has been collected.'.format(len(topic_docs['documents'])))
     with open(PROJECT_ROOT_DIR + '/retrieval_results.json', 'w', encoding='utf-8') as f:
         json.dump(retrieval_results, f)
 

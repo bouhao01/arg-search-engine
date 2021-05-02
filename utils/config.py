@@ -7,7 +7,7 @@ from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import classification_report
 from sklearn.metrics import f1_score
 import transformers
-from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification
+from transformers import DistilBertTokenizerFast, DistilBertForSequenceClassification, DistilBertModel
 from transformers import get_linear_schedule_with_warmup
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 from transformers import AdamW

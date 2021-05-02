@@ -1,5 +1,5 @@
 from utils.config import *
-from utils.model_handler import LoadBertModel, Predict, TextToSentences
+from utils.model_handler import LoadBertModel, Predict, TextToSentences, EmbedDocument
 from utils.documents_retrieval import DownloadRelatedDocuments, GetRetrievalResults
 
 
@@ -14,6 +14,7 @@ def init():
 def main(args):
     # Retrieve docs from chatnoir
     #####################################
+
     DownloadRelatedDocuments() # Run only once
     retrieval_info = GetRetrievalResults()
 
@@ -24,7 +25,7 @@ def main(args):
                 sentences = f.readlines()
 
             if not sentences or 1 == len(sentences):
-                print('no sentences in {}'.format(doc_content['trec_id']))
+                print('no sentences in {}'.format(doc['trec_id']))
                 continue
 
             args_file_path = EXTRACTED_DOCUMENTS_DIR + 'topic-{}/{}.args'.format(ret_obj['topic']['id'], doc['trec_id'])
